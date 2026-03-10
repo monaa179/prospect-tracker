@@ -15,7 +15,7 @@
       @submit.prevent="search"
       class="rounded-2xl border border-white/5 bg-surface-900/60 p-6 backdrop-blur-sm"
     >
-      <div class="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+      <div class="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
         <!-- City -->
         <div>
           <label for="city" class="mb-1.5 block text-sm font-medium text-surface-300">Ville</label>
@@ -29,14 +29,25 @@
           />
         </div>
 
+        <!-- Address -->
+        <div>
+          <label for="address" class="mb-1.5 block text-sm font-medium text-surface-300">Adresse <span class="text-surface-500 font-normal">(optionnel)</span></label>
+          <input
+            id="address"
+            v-model="address"
+            type="text"
+            placeholder="Rue de Rivoli, Boulevard Haussmann…"
+            class="w-full rounded-lg border border-white/10 bg-surface-800/80 px-4 py-2.5 text-sm text-white placeholder-surface-500 outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20"
+          />
+        </div>
+
         <!-- Date -->
         <div>
-          <label for="since" class="mb-1.5 block text-sm font-medium text-surface-300">Créé depuis</label>
+          <label for="since" class="mb-1.5 block text-sm font-medium text-surface-300">Créé depuis <span class="text-surface-500 font-normal">(optionnel)</span></label>
           <input
             id="since"
             v-model="since"
             type="date"
-            required
             class="w-full rounded-lg border border-white/10 bg-surface-800/80 px-4 py-2.5 text-sm text-white outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20"
           />
         </div>
@@ -60,34 +71,52 @@
         </div>
       </div>
 
-      <!-- Real Opening toggle -->
-      <div class="mt-4 flex items-center gap-3">
-        <button
-          type="button"
-          @click="realOnly = !realOnly"
-          :class="[
-            'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500/40 focus:ring-offset-2 focus:ring-offset-surface-900',
-            realOnly ? 'bg-emerald-500' : 'bg-surface-700'
-          ]"
-          role="switch"
-          :aria-checked="realOnly"
-        >
-          <span
+      <!-- Filters row -->
+      <div class="mt-4 flex flex-wrap items-center gap-5">
+        <!-- Real Opening toggle -->
+        <div class="flex items-center gap-3">
+          <button
+            type="button"
+            @click="realOnly = !realOnly"
             :class="[
-              'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
-              realOnly ? 'translate-x-5' : 'translate-x-0'
+              'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500/40 focus:ring-offset-2 focus:ring-offset-surface-900',
+              realOnly ? 'bg-emerald-500' : 'bg-surface-700'
             ]"
-          />
-        </button>
-        <span class="text-sm font-medium text-surface-300">
-          Vraies ouvertures uniquement
-        </span>
-        <span
-          v-if="realOnly"
-          class="rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-medium text-emerald-400 ring-1 ring-inset ring-emerald-500/20"
-        >
-          Filtre actif
-        </span>
+            role="switch"
+            :aria-checked="realOnly"
+          >
+            <span
+              :class="[
+                'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
+                realOnly ? 'translate-x-5' : 'translate-x-0'
+              ]"
+            />
+          </button>
+          <span class="text-sm font-medium text-surface-300">
+            Vraies ouvertures uniquement
+          </span>
+          <span
+            v-if="realOnly"
+            class="rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-medium text-emerald-400 ring-1 ring-inset ring-emerald-500/20"
+          >
+            Filtre actif
+          </span>
+        </div>
+
+        <!-- Type de restauration filter -->
+        <div class="flex items-center gap-2">
+          <label for="apeFilter" class="text-sm font-medium text-surface-300">Type :</label>
+          <select
+            id="apeFilter"
+            v-model="selectedApeCode"
+            class="rounded-lg border border-white/10 bg-surface-800/80 px-3 py-1.5 text-sm text-white outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20"
+          >
+            <option value="">Tous les types</option>
+            <option v-for="opt in availableApeTypes" :key="opt.code" :value="opt.code">
+              {{ opt.label }} ({{ opt.count }})
+            </option>
+          </select>
+        </div>
       </div>
     </form>
 
@@ -157,7 +186,7 @@
           <!-- Badges -->
           <div class="flex items-center gap-2">
             <span class="inline-flex items-center rounded-md bg-primary-500/10 px-2 py-0.5 text-xs font-medium text-primary-400 ring-1 ring-inset ring-primary-500/20">
-              {{ r.apeCode || '—' }}
+              {{ apeLabel(r.apeCode) }}
             </span>
             <span
               v-if="r.isRealOpening"
@@ -179,6 +208,14 @@
           <p class="mt-2 text-sm text-surface-400 line-clamp-2">
             {{ formatAddress(r) }}
           </p>
+
+          <!-- Director -->
+          <div v-if="r.directorName" class="mt-2 flex items-center gap-1.5 text-xs text-surface-400">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 text-primary-400/60" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+            </svg>
+            <span>{{ r.directorName }}</span>
+          </div>
 
           <!-- Date -->
           <div class="mt-4 flex items-center gap-1.5 text-xs text-surface-500">
@@ -248,10 +285,14 @@
 </template>
 
 <script setup lang="ts">
+import { watch } from 'vue'
+
 // Persist search state across navigation with useState
 const city = useState('search-city', () => '')
 const since = useState('search-since', () => '')
+const address = useState('search-address', () => '')
 const realOnly = useState('search-real-only', () => false)
+const selectedApeCode = useState('search-ape-code', () => '')
 const hasSearched = useState('search-has-searched', () => false)
 const cachedResults = useState<any[]>('search-results', () => [])
 const cachedError = useState<string | null>('search-error', () => null)
@@ -260,7 +301,52 @@ const perPage = useState('search-per-page', () => 20)
 
 const pending = ref(false)
 const searchError = computed(() => cachedError.value)
-const allRestaurants = computed(() => cachedResults.value)
+
+// Base results after realOnly filter (before APE filter)
+const baseFilteredResults = computed(() => {
+  if (realOnly.value) {
+    return cachedResults.value.filter((r: any) => r.isRealOpening === true)
+  }
+  return cachedResults.value
+})
+
+// Dynamic APE types from base filtered results
+const availableApeTypes = computed(() => {
+  const counts: Record<string, number> = {}
+  for (const r of baseFilteredResults.value) {
+    const code = r.apeCode || ''
+    const normalized = code.includes('.') ? code : code.replace(/^(\d{2})(\d{2})([A-Z])$/, '$1.$2$3')
+    if (normalized) {
+      counts[normalized] = (counts[normalized] || 0) + 1
+    }
+  }
+  return Object.entries(counts)
+    .map(([code, count]) => ({ code, label: apeLabel(code), count }))
+    .sort((a, b) => b.count - a.count)
+})
+
+const allRestaurants = computed(() => {
+  let results = baseFilteredResults.value
+  if (selectedApeCode.value) {
+    results = results.filter((r: any) => {
+      const code = r.apeCode || ''
+      const normalized = code.includes('.') ? code : code.replace(/^(\d{2})(\d{2})([A-Z])$/, '$1.$2$3')
+      return normalized === selectedApeCode.value
+    })
+  }
+  return results
+})
+
+// Reset page when filter changes, auto-reset APE if no longer available
+watch([realOnly, selectedApeCode], () => {
+  currentPage.value = 1
+})
+watch(realOnly, () => {
+  const codes = availableApeTypes.value.map((t: any) => t.code)
+  if (selectedApeCode.value && !codes.includes(selectedApeCode.value)) {
+    selectedApeCode.value = ''
+  }
+})
 
 // Pagination
 const totalPages = computed(() => Math.ceil(allRestaurants.value.length / perPage.value) || 1)
@@ -305,8 +391,11 @@ async function search() {
   currentPage.value = 1
 
   try {
+    const params: any = { city: city.value, realOnly: realOnly.value }
+    if (since.value) params.since = since.value
+    if (address.value) params.address = address.value
     const result = await $fetch<{ success: boolean; count: number; data: any[] }>('/api/restaurants', {
-      params: { city: city.value, since: since.value, realOnly: realOnly.value }
+      params
     })
     cachedResults.value = result.data || []
   } catch (e: any) {

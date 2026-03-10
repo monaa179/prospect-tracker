@@ -4,7 +4,8 @@ import { isRealOpening } from '../utils/restaurant.utils'
 
 export interface InseeSearchParams {
     city: string
-    since: string
+    since?: string
+    address?: string
     limit?: number
     page?: number
 }
@@ -58,9 +59,9 @@ export class InseeService {
     }
 
     /**
-     * Search restaurants in Sirene API (auto-paginates to fetch ALL results)
+     * Search restaurants for prospects (limited to 100)
      */
-    static async searchRestaurants({ city, since }: InseeSearchParams) {
+    static async searchProspects(city: string) {
         const communeCode = await this.getCommuneCode(city)
         if (!communeCode) {
             throw new Error(`Code commune non trouvé pour la ville : ${city}`)
@@ -71,7 +72,63 @@ export class InseeService {
             ? `(${codes.map(c => `codeCommuneEtablissement:${c}`).join(' OR ')})`
             : `codeCommuneEtablissement:${codes[0]}`
 
-        const q = `periode(activitePrincipaleEtablissement:56.10A OR activitePrincipaleEtablissement:56.10C AND etatAdministratifEtablissement:A) AND dateCreationEtablissement:[${since} TO *] AND ${communeFilter}`
+        // Search all establishments (active 'A' and closed 'F')
+        const q = `periode(activitePrincipaleEtablissement:(56.10A OR 56.10B OR 56.10C)) AND ${communeFilter}`
+
+        console.log(`[INSEE] Searching prospects for city: ${city} (Code: ${communeCode})`)
+        console.log(`[INSEE] Query: ${q}`)
+
+        try {
+            const response = await axios.get(`${this.API_BASE_URL}/siret`, {
+                headers: this.getHeaders(),
+                params: {
+                    q,
+                    nombre: 100,
+                    debut: 0
+                }
+            })
+
+            const établissements = response.data.etablissements || []
+            return établissements.map((et: any) => this.normalizeData(et))
+        } catch (error: any) {
+            if (error.response?.status === 404) return []
+            console.error('[INSEE] API Error:', JSON.stringify(error.response?.data || error.message, null, 2))
+            throw error
+        }
+    }
+
+    /**
+     * Search restaurants in Sirene API (auto-paginates to fetch ALL results)
+     */
+    static async searchRestaurants({ city, since, address }: InseeSearchParams) {
+        const communeCode = await this.getCommuneCode(city)
+        if (!communeCode) {
+            throw new Error(`Code commune non trouvé pour la ville : ${city}`)
+        }
+
+        const codes = this.getArrondissementCodes(communeCode)
+        const communeFilter = codes.length > 1
+            ? `(${codes.map(c => `codeCommuneEtablissement:${c}`).join(' OR ')})`
+            : `codeCommuneEtablissement:${codes[0]}`
+
+        // Build query parts - Search all establishments (active 'A' and closed 'F')
+        const queryParts: string[] = [
+            'periode(activitePrincipaleEtablissement:56.10A OR activitePrincipaleEtablissement:56.10C)',
+            communeFilter
+        ]
+
+        // Optional date filter
+        if (since) {
+            queryParts.push(`dateCreationEtablissement:[${since} TO *]`)
+        }
+
+        // Optional address filter
+        if (address) {
+            // Search in street name field
+            queryParts.push(`libelleVoieEtablissement:"${address}"`)
+        }
+
+        const q = queryParts.join(' AND ')
 
         const PAGE_SIZE = 1000 // INSEE API max per request
         let debut = 0
@@ -100,12 +157,14 @@ export class InseeService {
 
                 for (const etablissement of établissements) {
                     const normalized = this.normalizeData(etablissement)
-                    normalized.isRealOpening = isRealOpening(
-                        normalized.dateCreationUniteLegale,
-                        normalized.createdAtInsee,
-                        normalized.nombrePeriodes,
-                        new Date(since)
-                    )
+                    normalized.isRealOpening = since
+                        ? isRealOpening(
+                            normalized.dateCreationUniteLegale,
+                            normalized.createdAtInsee,
+                            normalized.nombrePeriodes,
+                            new Date(since)
+                        )
+                        : false
                     const saved = await this.upsertEstablishment(normalized)
                     allResults.push(saved)
                 }
@@ -173,7 +232,8 @@ export class InseeService {
             lastInseeSyncAt: new Date(),
             lastSyncAt: new Date(),
             source: 'insee',
-            isRealOpening: false as boolean
+            isRealOpening: false as boolean,
+            isActive: et.periodesEtablissement?.[0]?.etatAdministratifEtablissement === 'A'
         }
     }
 

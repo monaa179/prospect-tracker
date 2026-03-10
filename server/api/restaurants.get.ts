@@ -3,18 +3,19 @@ import { InseeService } from '../services/insee.service'
 export default defineEventHandler(async (event) => {
     const query = getQuery(event)
     const city = query.city as string
-    const since = query.since as string
+    const since = (query.since as string) || undefined
+    const address = (query.address as string) || undefined
     const realOnly = query.realOnly === 'true'
 
-    if (!city || !since) {
+    if (!city) {
         throw createError({
             statusCode: 400,
-            statusMessage: 'Parameters "city" and "since" (YYYY-MM-DD) are required.'
+            statusMessage: 'Parameter "city" is required.'
         })
     }
 
     try {
-        const restaurants = await InseeService.searchRestaurants({ city, since })
+        const restaurants = await InseeService.searchRestaurants({ city, since, address })
         const filtered = realOnly
             ? restaurants.filter((r: any) => r.isRealOpening === true)
             : restaurants
